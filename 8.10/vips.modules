@@ -895,6 +895,7 @@
       <dep package="libexif"/>
       <dep package="libpng"/>
       <dep package="libspng"/>
+      <dep package="openslide"/>
     </dependencies>
   </autotools>
 
