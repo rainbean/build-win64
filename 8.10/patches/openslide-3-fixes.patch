@@ -392,3 +392,118 @@ index 1111111..2222222 100644
  
  AC_SUBST(FEATURE_FLAGS)
  
+From ffbb8039c0158f9d143de95dd29b04cf2a9d26b8 Mon Sep 17 00:00:00 2001
+From: Jimmy Lee <jimmy.m.lee@gmail.com>
+Date: Mon, 14 Dec 2020 10:24:11 +0800
+Subject: [PATCH] fix: open z-stack files and report stack index with minimal
+ API change, (#166)
+
+---
+ src/openslide-private.h |  2 ++
+ src/openslide.c         | 36 ++++++++++++++++++++++++------------
+ 2 files changed, 26 insertions(+), 12 deletions(-)
+
+diff --git a/src/openslide-private.h b/src/openslide-private.h
+index e889384..b2c5640 100644
+--- a/src/openslide-private.h
++++ b/src/openslide-private.h
+@@ -322,6 +322,8 @@ void _openslide_performance_warn_once(gint *warned_flag,
+
+ // private properties, for now
+ #define _OPENSLIDE_PROPERTY_NAME_LEVEL_COUNT "openslide.level-count"
++#define _OPENSLIDE_PROPERTY_NAME_STACK_COUNT "openslide.stack-count"
++#define _OPENSLIDE_PROPERTY_NAME_TEMPLATE_STACK_INDEX "openslide.stack[%d].level-index"
+ #define _OPENSLIDE_PROPERTY_NAME_TEMPLATE_LEVEL_WIDTH "openslide.level[%d].width"
+ #define _OPENSLIDE_PROPERTY_NAME_TEMPLATE_LEVEL_HEIGHT "openslide.level[%d].height"
+ #define _OPENSLIDE_PROPERTY_NAME_TEMPLATE_LEVEL_DOWNSAMPLE "openslide.level[%d].downsample"
+diff --git a/src/openslide.c b/src/openslide.c
+index d32c8e2..6b81411 100644
+--- a/src/openslide.c
++++ b/src/openslide.c
+@@ -234,6 +234,28 @@ static const char **strv_from_hashtable_keys(GHashTable *h) {
+   return result;
+ }
+
++static void openslide_detect_stack(openslide_t *osr) {
++  // init stack count as one, which means single stack, no multi-z-planes
++  int stack_count = 1;
++  int c = 1;
++  g_hash_table_insert(osr->properties,
++                      g_strdup_printf(_OPENSLIDE_PROPERTY_NAME_TEMPLATE_STACK_INDEX, 0),
++                      g_strdup_printf("%d", 0));
++  // detect total stacks
++  for (int32_t i = 1; i < osr->level_count; i++) {
++    if (osr->levels[i]->downsample < osr->levels[i - 1]->downsample) {
++      g_hash_table_insert(osr->properties,
++                          g_strdup_printf(_OPENSLIDE_PROPERTY_NAME_TEMPLATE_STACK_INDEX, c),
++                          g_strdup_printf("%d", i));
++      stack_count++;
++      c++;
++    }
++  }
++  g_hash_table_insert(osr->properties,
++                      g_strdup(_OPENSLIDE_PROPERTY_NAME_STACK_COUNT),
++                      g_strdup_printf("%d", stack_count));
++}
++
+ openslide_t *openslide_open(const char *filename) {
+   GError *tmp_err = NULL;
+
+@@ -278,18 +300,8 @@ openslide_t *openslide_open(const char *filename) {
+     }
+   }
+
+-  // check downsamples
+-  for (int32_t i = 1; i < osr->level_count; i++) {
+-    //g_debug("downsample: %g", osr->levels[i]->downsample);
+-
+-    if (osr->levels[i]->downsample < osr->levels[i - 1]->downsample) {
+-      g_warning("Downsampled images not correctly ordered: %g < %g",
+-		osr->levels[i]->downsample, osr->levels[i - 1]->downsample);
+-      openslide_close(osr);
+-      _openslide_hash_destroy(quickhash1);
+-      return NULL;
+-    }
+-  }
++  // detect level stacks based on downsample size
++  openslide_detect_stack(osr);
+
+   // set hash property
+   const char *hash_str = _openslide_hash_get_string(quickhash1);
+--
+2.25.1
+
+From 336dcbe60ba29f5e36af7189738f29b650e7183f Mon Sep 17 00:00:00 2001
+From: Jimmy Lee <jimmy.m.lee@gmail.com>
+Date: Wed, 27 Jan 2021 15:40:25 +0800
+Subject: [PATCH] support Motic-generated Aperio slides (#228)
+
+---
+ src/openslide-vendor-aperio.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/openslide-vendor-aperio.c b/src/openslide-vendor-aperio.c
+index 650401d..056dba2 100644
+--- a/src/openslide-vendor-aperio.c
++++ b/src/openslide-vendor-aperio.c
+@@ -42,6 +42,7 @@
+ #include <tiffio.h>
+
+ static const char APERIO_DESCRIPTION[] = "Aperio";
++static const char MOTIC_DESCRIPTION[] = "Motic";
+
+ #define APERIO_COMPRESSION_JP2K_YCBCR 33003
+ #define APERIO_COMPRESSION_JP2K_RGB   33005
+@@ -293,7 +294,8 @@ static bool aperio_detect(const char *filename G_GNUC_UNUSED,
+   if (!tagval) {
+     return false;
+   }
+-  if (!g_str_has_prefix(tagval, APERIO_DESCRIPTION)) {
++  if (!g_str_has_prefix(tagval, APERIO_DESCRIPTION) &&
++      !g_str_has_prefix(tagval, MOTIC_DESCRIPTION)) {
+     g_set_error(err, OPENSLIDE_ERROR, OPENSLIDE_ERROR_FAILED,
+                 "Not an Aperio slide");
+     return false;
+--
+2.25.1
+
