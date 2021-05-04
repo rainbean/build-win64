@@ -47,7 +47,7 @@
   <repository
     type="tarball"
     name="openslide"
-    href="https://github.com/openslide/openslide/releases/download/"/>
+    href="https://github.com/rainbean/openslide/releases/download/"/>
 
   <repository
     type="tarball"
@@ -437,9 +437,7 @@
     <branch
       repo="openslide"
       module="v${version}/openslide-${version}.tar.gz"
-      version="3.4.1">
-      <patch file="patches/openslide-3-fixes.patch" strip="1"/>
-    </branch>
+      version="3.4.1.1"/>
     <dependencies>
       <dep package="zlib"/>
       <dep package="cairo"/>
