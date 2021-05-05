@@ -437,7 +437,7 @@
     <branch
       repo="openslide"
       module="v${version}/openslide-${version}.tar.gz"
-      version="3.4.1.1"/>
+      version="3.4.2"/>
     <dependencies>
       <dep package="zlib"/>
       <dep package="cairo"/>
